@@ -145,19 +145,16 @@ let setup_repository ~variant ~for_docker ~opam_version =
        Otherwise the "opam pin" after the "opam repository set-url" will fail (cannot find the new package for some reason) *)
   run "%s -f %s/bin/opam-%s %s/bin/opam" ln prefix opam_version_str prefix
   :: run ~network "opam init --reinit%s -ni" opamrc
-  :: (* TODO: Remove ~network when https://github.com/ocurrent/ocaml-dockerfile/pull/132 is merged *)
-     env "OPAMDOWNLOADJOBS" "1"
-  :: (* Try to avoid github spam detection *)
-     env "OPAMERRLOGLEN" "0"
-  :: (* Show the whole log if it fails *)
-     env "OPAMSOLVERTIMEOUT" "500"
-  :: (* Increase timeout. Poor mccs is doing its best *)
-     env "OPAMPRECISETRACKING" "1"
-  :: (* Mitigate https://github.com/ocaml/opam/issues/3997 *)
-     env "CI" "true"
-  :: env "OPAM_REPO_CI" "true"
-  :: (* Advertise CI for test frameworks *)
-     [
+     (* TODO: Remove ~network when https://github.com/ocurrent/ocaml-dockerfile/pull/132 is merged *)
+  :: env "OPAMDOWNLOADJOBS" "1" (* Try to avoid github spam detection *)
+  :: env "OPAMERRLOGLEN" "0" (* Show the whole log if it fails *)
+  :: env "OPAMSOLVERTIMEOUT"
+       "500" (* Increase timeout. Poor mccs is doing its best *)
+  :: env "OPAMPRECISETRACKING"
+       "1" (* Mitigate https://github.com/ocaml/opam/issues/3997 *)
+  :: env "CI" "true"
+  :: env "OPAM_REPO_CI" "true" (* Advertise CI for test frameworks *)
+  :: [
        run "rm -rf opam-repository/";
        copy [ "." ] ~dst:"opam-repository/";
        run "opam repository set-url%s --strict default opam-repository/"
