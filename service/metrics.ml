@@ -5,8 +5,7 @@ let subsystem = "pipeline"
 
 let master =
   let help = "Number of PRs by state" in
-  Gauge.v_label ~label_name:"state" ~help ~namespace ~subsystem
-    "pr_state_total"
+  Gauge.v_label ~label_name:"state" ~help ~namespace ~subsystem "pr_state_total"
 
 let handled_prs =
   let help = "Number of PRs closed or merged" in
@@ -14,11 +13,9 @@ let handled_prs =
 
 let jobs_per_pr =
   let help = "Number of jobs per PR" in
-  Gauge.v_label ~label_name:"ref" ~help ~namespace ~subsystem
-    "jobs_per_pr"
+  Gauge.v_label ~label_name:"ref" ~help ~namespace ~subsystem "jobs_per_pr"
 
 let primary_repo : Current_github.Repo_id.t option ref = ref None
-
 let set_primary_repo repo = primary_repo := Some repo
 
 (** Maps e.g. refs/pull/123/head to #123 *)
@@ -42,10 +39,9 @@ let update () =
       Index.get_jobs_per_ref repo
       |> List.sort (fun (_, n0) (_, n1) -> Int.compare n0 n1)
     in
-    List.iter (fun (ref, n) ->
-      Gauge.set
-        (jobs_per_pr @@ prettify_ref ref)
-        (float_of_int n))
+    List.iter
+      (fun (ref, n) ->
+        Gauge.set (jobs_per_pr @@ prettify_ref ref) (float_of_int n))
       jobs_per_ref
   in
   Option.iter f !primary_repo

@@ -7,11 +7,7 @@ module Analysis : sig
     | UnsignificantlyChanged
   [@@deriving yojson]
 
-  type data = {
-    kind : kind;
-    has_tests : bool;
-  } [@@deriving yojson]
-
+  type data = { kind : kind; has_tests : bool } [@@deriving yojson]
   type t [@@deriving yojson]
 
   val get_opam : cwd:Fpath.t -> string -> (string, unit) result Lwt.t

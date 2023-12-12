@@ -1,6 +1,7 @@
 module Server = Cohttp_lwt_unix.Server
 
-let css = {|
+let css =
+  {|
   body {
     margin: 0;
     padding: 0;
@@ -87,7 +88,9 @@ let css = {|
     font-weight: bold;
   }
 
-|} ^ Current_ansi.css ^ Github.css
+|}
+  ^ Current_ansi.css
+  ^ Github.css
 
 let get () =
   let headers = Cohttp.Header.init_with "Content-Type" "text/css" in
