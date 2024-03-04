@@ -3,24 +3,43 @@
 open Capnp_rpc_lwt
 open Lwt.Infix
 
+open Opam_repo_ci
+
 let () =
   Memtrace.trace_if_requested ~context:"opam-repo-ci-local" ();
   Unix.putenv "DOCKER_BUILDKIT" "1";
   Prometheus_unix.Logging.init ()
 
-let setup_capnp ~engine ~listen_address capnp_address =
-  Capnp_setup.run ~listen_address capnp_address >|= fun (_, rpc_engine_resolver) ->
-  Option.iter (fun r -> Capability.resolve_ok r (Api_impl.make_ci ~engine)) rpc_engine_resolver
+let get_test_config () =
+  let results, push_result = Lwt_stream.create () in
+  { Opam_repo_ci.Test_config.results; push_result }
+
+let setup_capnp ~engine ~listen_address secret_key cap_file capnp_address =
+  Capnp_setup.run ~listen_address ~secret_key ~cap_file capnp_address
+  >|= fun (_, rpc_engine_resolver) ->
+  Option.iter
+    (fun r -> Capability.resolve_ok r (Api_impl.make_ci ~engine))
+    rpc_engine_resolver
 
 let main config mode capnp_address repo branch level =
   Logs.set_level level;
   Lwt_main.run begin
     let repo = Current_git.Local.v (Result.get_ok @@ Fpath.of_string repo) in
-    let engine = Current.Engine.create ~config (Pipeline.local_test_pr repo branch) in
-    let listen_address = Capnp_rpc_unix.Network.Location.tcp ~host:"0.0.0.0" ~port:Conf.Capnp.internal_port in
-    setup_capnp ~engine ~listen_address capnp_address >>= fun () ->
+    let engine =
+      Current.Engine.create ~config
+        (Pipeline.local_test_pr ~test_config:(get_test_config ()) repo branch)
+    in
+    let listen_address =
+      Capnp_rpc_unix.Network.Location.tcp
+        ~host:"0.0.0.0" ~port:Conf.Capnp.internal_port
+    in
+    setup_capnp ~engine ~listen_address Conf.Capnp.secret_key
+      Conf.Capnp.cap_file capnp_address >>= fun () ->
     let routes = Current_web.routes engine in
-    let site = Current_web.Site.(v ~has_role:allow_all) ~name:"opam-repo-ci-local" routes in
+    let site =
+      Current_web.Site.(v
+        ~has_role:allow_all) ~name:"opam-repo-ci-local" routes
+    in
     Lwt.choose ([
       Current.Engine.thread engine;
       Current_web.run ~mode site;

@@ -13,7 +13,7 @@ let cmdliner_envs =
 
 module Capnp = struct
   (* Cap'n Proto RPC is enabled by passing --capnp-public-address. These values are hard-coded
-     (because they're just internal to the Docker container). *)
+    (because they're just internal to the Docker container). *)
 
   let cap_secrets =
     match profile with
