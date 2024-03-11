@@ -191,16 +191,6 @@ let summarise ~repo ~hash builds =
   in
   summary
 
-let check_lint ~test_config lint =
-  let f () =
-    let+ result = Current.catch lint in
-    match result with
-    | Ok () -> Printf.printf "Ok ()\n"
-    | Error (`Msg s) -> Printf.printf "Error \"%s\"\n" s;
-    exit 0
-  in
-  Option.iter (fun _tc -> ignore @@ f ()) test_config
-
 let test_pr ~ocluster ~master head =
   let repo = Current.map Current_github.Api.Commit.repo_id head in
   let commit_id = Current.map Github.Api.Commit.id head in
@@ -265,9 +255,8 @@ let local_test_pr ?test_config repo pr_branch () =
   let analysis = analyse ~master pr_branch in
   let lint =
     let packages = Current.map Analyse.Analysis.packages analysis in
-    Lint.check ~host_os:Conf.host_os ~master ~packages pr_branch
+    Lint.check ?test_config ~host_os:Conf.host_os ~master ~packages pr_branch
   in
-  check_lint ~test_config lint;
   let builds =
     Node.root
       (Node.leaf ~label:"(analysis)" (Node.action `Analysed analysis)

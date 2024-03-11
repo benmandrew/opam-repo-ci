@@ -419,10 +419,15 @@ let get_packages_kind =
       (pkg, kind))
       packages)
 
-let check ~host_os ~master ~packages src =
-  Current.component "Lint" |>
-  let> src
-  and> packages = get_packages_kind packages
-  and> master in
-  let host_os = if String.equal host_os "macos" then Macos else Other in
-  Lint_cache.run { master } { src; packages } { host_os }
+let check ?test_config ~host_os ~master ~packages src =
+  let res =
+    Current.component "Lint" |>
+    let> src
+    and> packages = get_packages_kind packages
+    and> master in
+    let host_os = if String.equal host_os "macos" then Macos else Other in
+    Lint_cache.run { master } { src; packages } { host_os }
+  in
+  Integration_test.check_lint ~test_config res;
+  res
+
