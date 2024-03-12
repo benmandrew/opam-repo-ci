@@ -3,5 +3,4 @@ let () =
   @@ Alcotest_lwt.run "opam-repo-ci"
       [
         ("index", Test_index.tests);
-        ("pipeline", Test_pipeline.tests);
       ]

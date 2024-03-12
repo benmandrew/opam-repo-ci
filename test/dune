@@ -5,4 +5,10 @@
  (preprocess
   (pps ppx_deriving.eq ppx_deriving_yojson))
  (deps
-  (glob_files_rec ./patches/*)))
+  (glob_files ./patches/*)))
+
+(cram
+ (deps
+  %{bin:opam-repo-ci-local}
+  ./scripts/setup_repo.sh
+  (glob_files ./patches/*)))
