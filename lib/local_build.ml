@@ -232,7 +232,7 @@ module R = Op (
   struct
     include Current.String
 
-    type spec = [`Build of Spec.opam_build]
+    type spec = [`List_revdeps of Spec.list_revdeps]
     type ty = ([ `Opam of spec ] * OpamPackage.t)
 
     let parse_output = parse_revdeps_output

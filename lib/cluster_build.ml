@@ -50,8 +50,15 @@ let pool_of_variant v =
   in
   os^"-"^arch
 
+(* Type magic to restrict [build] and [list_revdeps]
+   specs to only be used in their respective modules *)
+type super = [ `Build of Spec.opam_build | `List_revdeps of Spec.list_revdeps ]
+
 module type S = sig
   include Current_cache.S.WITH_MARSHAL
+
+  type spec = private [< super ]
+  type ty = ([ `Opam of spec * OpamPackage.t ])
 
   val parse_output : Current.Job.t -> Cluster_api.Raw.Client.Job.t Capability.t -> (t, [`Msg of string]) Lwt_result.t
 end
@@ -71,7 +78,7 @@ module Op (Value : S) = struct
       pool : string;                            (* The build pool to use (e.g. "linux-arm64") *)
       commit : Current_git.Commit_id.t;         (* The source code to build and test *)
       variant : Variant.t;                      (* Added as a comment in the Dockerfile and selects personality *)
-      ty : Spec.ty;
+      ty : Value.ty;
     }
 
     let to_json { pool; commit; variant; ty } =
@@ -79,7 +86,7 @@ module Op (Value : S) = struct
         "pool", `String pool;
         "commit", `String (Current_git.Commit_id.hash commit);
         "variant", Variant.to_yojson variant;
-        "ty", Spec.ty_to_yojson ty;
+        "ty", Spec.ty_to_yojson (ty :> Spec.ty);
       ]
 
     let digest t = Yojson.Safe.to_string (to_json t)
@@ -107,7 +114,7 @@ module Op (Value : S) = struct
     in
     let build_spec ~for_docker =
       let base = Spec.base_to_string base in
-      Opam_build.v ~for_docker ~base ~variant ty
+      Opam_build.v ~for_docker ~base ~variant (ty :> Spec.ty)
     in
     Current.Job.write job
       (Fmt.str fmt_dockerfile Current_git.Commit_id.pp_user_clone commit master
@@ -143,6 +150,9 @@ module B = Op (
   struct
     include Current.Unit
 
+    type spec = [`Build of Spec.opam_build]
+    type ty = ([ `Opam of spec * OpamPackage.t ])
+
     let parse_output _ _ = Lwt_result.ok Lwt.return_unit
   end)
 
@@ -160,12 +170,19 @@ let v t ~label ~spec ~base ~master ~urgent commit =
   and> master
   and> urgent in
   let pool = pool_of_variant variant in
+  let ty =
+    match ty with
+    | `Opam
+  in
   let t = { B.config = t; master; urgent; base } in
   BC.get t { B.Key.pool; commit; variant; ty }
 
 module R = Op (
   struct
     include Current.String
+
+    type spec = [`List_revdeps of Spec.list_revdeps]
+    type ty = ([ `Opam of spec * OpamPackage.t ])
 
     let parse_output job build_job =
       let buffer = Buffer.create 1024 in
