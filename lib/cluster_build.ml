@@ -50,7 +50,13 @@ let pool_of_variant v =
   in
   os^"-"^arch
 
-module Op = struct
+module type S = sig
+  include Current_cache.S.WITH_MARSHAL
+
+  val parse_output : Current.Job.t -> Cluster_api.Raw.Client.Job.t Capability.t -> (t, [`Msg of string]) Lwt_result.t
+end
+
+module Op (Value : S) = struct
   type nonrec t = {
     config : t;
     master : Current_git.Commit.t;
@@ -79,22 +85,18 @@ module Op = struct
     let digest t = Yojson.Safe.to_string (to_json t)
   end
 
-  module Value = Current.String
+  module Value = Value
 
-  let parse_output ty job build_job =
-    let buffer =
-      match ty with
-      | `Opam (`List_revdeps _, _) -> Some (Buffer.create 1024)
-      | _ -> None
-    in
-    Capability.with_ref build_job (run_job ?buffer ~job) >>!= fun (_ : string) ->
-    match buffer with
-    | None -> Lwt_result.return ""
-    | Some buffer ->
-      match Astring.String.cuts ~sep:"\n@@@OUTPUT\n" (Buffer.contents buffer) with
-      | [_; output; _] -> Lwt_result.return output
-      | [_; rest ] when Astring.String.is_prefix ~affix:"@@@OUTPUT\n" rest -> Lwt_result.return ""
-      | _ -> Lwt_result.fail (`Msg "Missing output from command")
+  let fmt_dockerfile = format_of_string "@.\
+    To reproduce locally:@.@.\
+    cd $(mktemp -d)@.\
+    %a@.\
+    git fetch origin master@.\
+    git merge --no-edit %s@.\
+    cat > ../Dockerfile <<'END-OF-DOCKERFILE'@.\
+    \o033[34m%s\o033[0m@.\
+    END-OF-DOCKERFILE@.\
+    docker build -f ../Dockerfile .@.@."
 
   let build { config; master; urgent; base } job
       { Key.pool; commit; variant; ty } =
@@ -105,25 +107,10 @@ module Op = struct
     in
     let build_spec ~for_docker =
       let base = Spec.base_to_string base in
-      match ty with
-      | `Opam (`List_revdeps { opam_version }, pkg) ->
-          Opam_build.revdeps ~for_docker ~opam_version ~base ~variant ~pkg
-      | `Opam (`Build { revdep; lower_bounds; with_tests; opam_version }, pkg) ->
-          Opam_build.spec ~for_docker ~opam_version ~base ~variant ~revdep ~lower_bounds ~with_tests ~pkg
+      Opam_build.v ~for_docker ~base ~variant ty
     in
     Current.Job.write job
-      (Fmt.str "@.\
-                To reproduce locally:@.@.\
-                cd $(mktemp -d)@.\
-                %a@.\
-                git fetch origin master@.\
-                git merge --no-edit %s@.\
-                cat > ../Dockerfile <<'END-OF-DOCKERFILE'@.\
-                \o033[34m%s\o033[0m@.\
-                END-OF-DOCKERFILE@.\
-                docker build -f ../Dockerfile .@.@."
-         Current_git.Commit_id.pp_user_clone commit
-         master
+      (Fmt.str fmt_dockerfile Current_git.Commit_id.pp_user_clone commit master
          (Obuilder_spec.Docker.dockerfile_of_spec ~os ~buildkit:false (build_spec ~for_docker:true)));
     let spec_str = Fmt.to_to_string Obuilder_spec.pp (build_spec ~for_docker:false) in
     let action = Cluster_api.Submission.obuilder_build spec_str in
@@ -141,7 +128,7 @@ module Op = struct
     Current.Job.log job "Using OBuilder spec:@.%s@." spec_str;
     let build_pool = Current_ocluster.Connection.pool ?urgent ~job ~pool ~action ~cache_hint ~src connection in
     Current.Job.start_with ~pool:build_pool job ~timeout ~level:Current.Level.Average >>=
-    parse_output ty job
+    Value.parse_output job
 
   let pp f { Key.pool = _; commit; variant; ty } =
     Fmt.pf f "@[<v>%a@,from %a@,on %a@]"
@@ -152,7 +139,14 @@ module Op = struct
   let auto_cancel = true
 end
 
-module BC = Current_cache.Make(Op)
+module B = Op (
+  struct
+    include Current.Unit
+
+    let parse_output _ _ = Lwt_result.ok Lwt.return_unit
+  end)
+
+module BC = Current_cache.Make(B)
 
 let config ~timeout sr =
   let connection = Current_ocluster.Connection.create sr in
@@ -166,9 +160,24 @@ let v t ~label ~spec ~base ~master ~urgent commit =
   and> master
   and> urgent in
   let pool = pool_of_variant variant in
-  let t = { Op.config = t; master; urgent; base } in
-  BC.get t { Op.Key.pool; commit; variant; ty }
+  let t = { B.config = t; master; urgent; base } in
+  BC.get t { B.Key.pool; commit; variant; ty }
   |> Current.Primitive.map_result (Result.map ignore) (* TODO: Create a separate type of cache that doesn't parse the output *)
+
+module R = Op (
+  struct
+    include Current.String
+
+    let parse_output job build_job =
+      let buffer = Buffer.create 1024 in
+      Capability.with_ref build_job (run_job ~buffer ~job) >>!= fun (_ : string) ->
+      match Astring.String.cuts ~sep:"\n@@@OUTPUT\n" (Buffer.contents buffer) with
+      | [_; output; _] -> Lwt_result.return output
+      | [_; rest ] when Astring.String.is_prefix ~affix:"@@@OUTPUT\n" rest -> Lwt_result.return ""
+      | _ -> Lwt_result.fail (`Msg "Missing output from command")
+  end)
+
+module RC = Current_cache.Make(R)
 
 let list_revdeps t ~variant ~opam_version ~pkgopt ~base ~master ~after commit =
   Current.component "list revdeps" |>
@@ -178,18 +187,7 @@ let list_revdeps t ~variant ~opam_version ~pkgopt ~base ~master ~after commit =
   and> master
   and> () = after in
   let pool = pool_of_variant variant in
-  let t = { Op.config = t; master; urgent; base } in
+  let t = { R.config = t; master; urgent; base } in
   let ty = `Opam (`List_revdeps {Spec.opam_version}, pkg) in
-  BC.get t { Op.Key.pool; commit; variant; ty }
-  |> Current.Primitive.map_result (Result.map (fun output ->
-      String.split_on_char '\n' output |>
-      List.fold_left (fun acc -> function
-          | "" -> acc
-          | revdep ->
-              let revdep = OpamPackage.of_string revdep in
-              if OpamPackage.equal pkg revdep then
-                acc (* NOTE: opam list --recursive --depends-on <pkg> also returns <pkg> itself *)
-              else
-                OpamPackage.Set.add revdep acc
-        ) OpamPackage.Set.empty
-    ))
+  RC.get t { R.Key.pool; commit; variant; ty }
+  |> Current.Primitive.map_result (Result.map (Common.parse_revdeps pkg))

@@ -28,11 +28,11 @@ let specs =
     image @ lower_bounds @ revdeps
   in
   List.concat @@
-    (Build.compilers ~arch ~build) @
-    (Build.linux_distributions ~arch ~build) @
-    (Build.macos ~build) @
-    (Build.freebsd ~build) @
-    (Build.extras ~build)
+    (Build_all.compilers ~arch ~build) @
+    (Build_all.linux_distributions ~arch ~build) @
+    (Build_all.macos ~build) @
+    (Build_all.freebsd ~build) @
+    (Build_all.extras ~build)
 
 let header title variant ?(lower_bounds=false) ?(with_tests=false) opam_version =
   let opam_version =
@@ -62,40 +62,22 @@ let dump () =
     (* The base image tag is continually updated,
        so we use a standin for expect-testing *)
     let base = "BASE_IMAGE_TAG" in
-    match spec.ty with
-    | `Opam (`Build ob, pkg) ->
-      let spec_str =
-        Opam_build.spec
-          ~for_docker:true
-          ~opam_version:ob.opam_version
-          ~base
-          ~variant
-          ~revdep:None
-          ~lower_bounds:ob.lower_bounds
-          ~with_tests:ob.with_tests
-          ~pkg
-        |> Obuilder_spec.Docker.dockerfile_of_spec ~buildkit:true ~os:`Unix
-        |> indent
-      in
-      Lwt_io.write ch @@
-      Format.asprintf "%s\n%s\n"
-        (header "build" variant ~lower_bounds:ob.lower_bounds
-          ~with_tests:ob.with_tests ob.opam_version) spec_str
-    | `Opam (`List_revdeps lr, pkg) ->
-      let spec_str =
-        Opam_build.revdeps
-          ~for_docker:true
-          ~opam_version:lr.opam_version
-          ~base
-          ~variant
-          ~pkg
-        |> Obuilder_spec.Docker.dockerfile_of_spec ~buildkit:true ~os:`Unix
-        |> indent
-      in
-      Lwt_io.write ch @@
-      Format.asprintf "%s\n%s\n"
-        (header "list-revdeps" variant lr.opam_version) spec_str
-    ) specs
+    let spec_str =
+      Opam_build.v ~for_docker:true ~base ~variant spec.ty
+      |> Obuilder_spec.Docker.dockerfile_of_spec ~buildkit:true ~os:`Unix
+      |> indent
+    in
+    let content =
+      match spec.ty with
+      | `Opam (`Build ob, _) ->
+          header "build" variant ~lower_bounds:ob.lower_bounds
+            ~with_tests:ob.with_tests ob.opam_version
+      | `Opam (`List_revdeps lr, _) ->
+          header "list-revdeps" variant lr.opam_version
+    in
+    Lwt_io.write ch @@
+    Format.asprintf "%s\n%s\n" content spec_str
+  ) specs
 
 let main dump_specs =
   Result.ok @@

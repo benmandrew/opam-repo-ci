@@ -1,4 +1,4 @@
-val spec :
+(* val spec :
   for_docker:bool ->
   opam_version:[`V2_0 | `V2_1 | `Dev] ->
   base:string ->
@@ -15,4 +15,11 @@ val revdeps :
   base:string ->
   variant:Variant.t ->
   pkg:OpamPackage.t ->
+  Obuilder_spec.t *)
+
+val v :
+  for_docker:bool ->
+  base:string ->
+  variant:Variant.t ->
+  Spec.ty ->
   Obuilder_spec.t

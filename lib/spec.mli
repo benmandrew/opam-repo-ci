@@ -25,10 +25,13 @@ type list_revdeps = {
   opam_version : [ `Dev | `V2_0 | `V2_1 ];
 }
 
-(** Configuration for any job along with the package to build *)
-type ty = [
-  `Opam of [ `Build of opam_build | `List_revdeps of list_revdeps ] * package
+(** Configuration for any job *)
+type opam = [
+  `Build of opam_build | `List_revdeps of list_revdeps
 ] [@@deriving to_yojson]
+
+(** Configuration for any job along with the package to build *)
+type ty = [ `Opam of opam * package ] [@@deriving to_yojson]
 
 type t = { variant : Variant.t; ty : ty; }
 

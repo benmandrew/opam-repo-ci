@@ -48,6 +48,7 @@ let get_significant_available_pkg = function
     alpha / beta / release-candidate for each unreleased version. *)
 let compilers ~arch ~build =
   let master_distro = Distro.tag_of_distro master_distro in
+  (* [ List.hd @@ List.rev Ocaml_version.Releases.recent ] |> *)
   (Ocaml_version.Releases.recent @ Ocaml_version.Releases.unreleased_betas) |>
   List.map (fun v ->
     let v = Ocaml_version.with_just_major_and_minor v in
@@ -263,5 +264,4 @@ let with_docker ~host_arch ~analysis ~lint ~master source =
   [
     Node.leaf ~label:"(lint)" (Node.action `Linted lint);
     Node.branch ~label:"compilers" (compilers ~arch:host_arch ~build);
-    Node.branch ~label:"distributions" (linux_distributions ~arch:host_arch ~build);
   ]

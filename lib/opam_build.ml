@@ -175,3 +175,10 @@ let revdeps ~for_docker ~opam_version ~base ~variant ~pkg =
         pkg pkg
     ]
   )
+
+let v ~for_docker ~base ~variant (ty : Spec.ty) =
+  match ty with
+  | `Opam (`List_revdeps { opam_version }, pkg) ->
+    revdeps ~for_docker ~opam_version ~base ~variant ~pkg
+  | `Opam (`Build { revdep; lower_bounds; with_tests; opam_version }, pkg) ->
+    spec ~for_docker ~opam_version ~base ~variant ~revdep ~lower_bounds ~with_tests ~pkg
