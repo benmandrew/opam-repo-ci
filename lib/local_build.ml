@@ -197,10 +197,6 @@ let v ~label ~spec ~base ~master ~urgent commit =
   and> urgent in
   let t = { B.config = local_builder; master; urgent; base } in
   BC.get t { commit; ty; variant }
-  |> Current.Primitive.map_result (function
-    | Ok () -> Logs.err (fun m -> m "Ok"); Ok ()
-    | Error (`Msg s) as a -> Logs.err (fun m -> m "Error: %s" s); a
-    | Error (`Active _) as a -> a)
 
 (* Docker output lines are of the form:
 

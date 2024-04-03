@@ -162,7 +162,6 @@ let v t ~label ~spec ~base ~master ~urgent commit =
   let pool = pool_of_variant variant in
   let t = { B.config = t; master; urgent; base } in
   BC.get t { B.Key.pool; commit; variant; ty }
-  |> Current.Primitive.map_result (Result.map ignore) (* TODO: Create a separate type of cache that doesn't parse the output *)
 
 module R = Op (
   struct

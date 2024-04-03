@@ -8,27 +8,33 @@ let specs =
   let pkg = OpamPackage.create (OpamPackage.Name.of_string "a") (OpamPackage.Version.of_string "0.0.1") in
   let revdep = OpamPackage.create (OpamPackage.Name.of_string "b") (OpamPackage.Version.of_string "0.1.0") in
   let arch = `X86_64 in
-  let build ~opam_version ~lower_bounds ~revdeps _s variant =
+  let build ~all ~opam_version ~lower_bounds ~revdeps _s variant =
     let image = [ Spec.opam ~variant ~lower_bounds:false ~with_tests:false ~opam_version pkg ] in
-    let lower_bounds =
+    let lower_bounds () =
       if lower_bounds then
         [ Spec.opam ~variant ~lower_bounds:true ~with_tests:false ~opam_version pkg ]
       else []
     in
-    let revdeps =
+    let tests () =
+      [ Spec.opam ~variant ~lower_bounds:false ~with_tests:true ~opam_version pkg ]
+    in
+    let revdeps () =
       if revdeps then
         let ty = `Opam (`List_revdeps {Spec.opam_version}, pkg) in
         [
           Spec.{variant; ty};
-          Spec.opam ~variant ~lower_bounds:false ~with_tests:true ~revdep ~opam_version pkg
+          Spec.opam ~variant ~lower_bounds:false ~with_tests:false ~revdep ~opam_version pkg
         ]
       else
         []
     in
-    image @ lower_bounds @ revdeps
+    if all then image @ lower_bounds () @ tests () @ revdeps ()
+    else image
   in
+  let build_all = build ~all:true in
+  let build = build ~all:false in
   List.concat @@
-    (Build_all.compilers ~arch ~build) @
+    (Build_all.compilers ~arch ~build:build_all) @
     (Build_all.linux_distributions ~arch ~build) @
     (Build_all.macos ~build) @
     (Build_all.freebsd ~build) @
